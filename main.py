@@ -1,8 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from database import get_connection, init_db
 
 app = FastAPI()
 
+@app.on_event("startup")
+def on_startup():
+    init_db()
+    
 class TaskCreate(BaseModel):
     title: str
 
@@ -28,17 +33,21 @@ def health_check():
     return {'status': 'ok'}
 
 
-@app.get('/tasks', summary="List all tasks", description="Returns the full list of tasks currently stored in memory.")
+@app.get('/tasks', summary="List all tasks", description="Returns the full list of tasks currently stored in the database.")
 def get_tasks():
-    return tasks
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM tasks").fetchall()
+    return [dict(row) for row in rows]
 
 @app.get('/tasks/{task_id}', summary="Get one task", description="Returns a single task by its id. Returns 404 if the task does not exist.")
-def get_task(task_id : int):
-    for task in tasks:
-        if task['id'] == task_id:
-            return task
+def get_task(task_id: int):
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
 
-    raise HTTPException(status_code = 404, detail=f"Task {task_id} not found" )
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    return dict(row)
 
 @app.post("/tasks", status_code=201, summary="Create a task", description="Creates a new task with the given title. The task starts as not done.")
 def create_task(task: TaskCreate):
