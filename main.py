@@ -54,10 +54,18 @@ def create_task(task: TaskCreate):
     if not task.title.strip():
         raise HTTPException(status_code=400, detail="Title cannot be empty")
 
-    new_id = max((t["id"] for t in tasks), default=0) + 1
-    new_task = {"id": new_id, "title": task.title, "done": False}
-    tasks.append(new_task)
-    return new_task
+    conn = get_connection()
+    cursor = conn.execute(
+        "INSERT INTO tasks (title, done) VALUES (?, ?)", (task.title, 0)
+    )
+    conn.commit()
+
+    new_id = cursor.lastrowid
+    new_task = conn.execute(
+        "SELECT * FROM tasks WHERE id = ?", (new_id,)
+    ).fetchone()
+
+    return dict(new_task)
 
 @app.put('/tasks/{task_id}', summary="Update a task", description="Updates the title and/or done status of an existing task. Returns 404 if the task does not exist.")
 def update_task(task_id: int, update: TaskUpdate):
